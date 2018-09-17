@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd">
+    <http:listener-config name="HTTP_Listener_Configuration" host="0.0.0.0" port="8081" doc:name="HTTP Listener Configuration"/>
+    <http:request-config name="HTTP_Request_Configuration" protocol="HTTPS" host="onlinetools.ups.com" port="443" doc:name="HTTP Request Configuration">
+    
+    </http:request-config>
+    <flow name="pudoapiFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/location/search" doc:name="HTTP" allowedMethods="GET"/>
+        <logger message="#[message.inboundProperties.'http.query.params']" level="INFO" doc:name="Logger"/>
+        <choice doc:name="Choice">
+            <when expression="#[message.inboundProperties.'http.query.params'.address !=null]">
+                <flow-ref name="UPSSub_Flow" doc:name="UPS_Flow"/>
+            </when>
+            <otherwise>
+                <flow-ref name="default_flow" doc:name="Flow Reference"/>
+            </otherwise>
+        </choice>
+    </flow>
+    <sub-flow name="UPSSub_Flow">
+        <dw:transform-message mode="deferred" doc:name="Transform Message" metadata:id="024054ba-b993-48c1-a4cc-f0d7c9d1e6ad">
+            <dw:input-payload/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	AccessRequest: {
+		AccessLicenseNumber: "3D4F036B828B738C",
+		UserId: "name",
+		Password: "password"
+	},
+	LocatorRequest: {
+		Request: {
+			RequestAction: "Locator",
+			RequestOption: "1",
+			TransactionReference: {
+				CustomerContext: "XOLT Sample Code"
+			}
+		},
+		OriginAddress: {
+			AddressKeyFormat: {
+				AddressLine:inboundProperties."http.query.params".address,
+				PoliticalDivision2: inboundProperties."http.query.params".city,
+				PostcodePrimaryLow: inboundProperties."http.query.params".postalcode,
+				CountryCode: inboundProperties."http.query.params".country
+			}
+		},
+		Translate: {
+			Locale: "en_US"
+		},
+		UnitOfMeasurement: {
+			Code: "MI"
+		},
+		"LocationSearchCriteria": {
+			"SearchOption": {
+				"OptionType": {
+					"Code": "01"
+				},
+				"OptionCode": {
+					"Code": "018"
+				}
+			}
+		}
+	}
+}]]></dw:set-payload>
+        </dw:transform-message>
+        <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" doc:name="Logger"/>
+        <http:request config-ref="HTTP_Request_Configuration" path="/rest/Locator" method="POST" doc:name="HTTP">
+            <http:request-builder>
+                <http:header headerName="Content-Type" value="application/json"/>
+            </http:request-builder>
+            <http:success-status-code-validator values="200,503"/>
+        </http:request>
+        <dw:transform-message doc:name="Transform Message" metadata:id="d3001112-6db5-4de3-9aa9-1ee2933c10af">
+            <dw:input-payload mimeType="application/json"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	LocatorResponse: {
+		SearchResults: {
+
+			DropLocation: payload.LocatorResponse.SearchResults.DropLocation map ((dropLocation , indexOfDropLocation) -> {
+				AccessPointInformation: {
+					PublicAccessPointID: dropLocation.AccessPointInformation.PublicAccessPointID,
+					AccessPointStatus: dropLocation.AccessPointInformation.AccessPointStatus
+				},
+				AddressKeyFormat: dropLocation.AddressKeyFormat,
+				Distance: dropLocation.Distance,
+				SpecialInstructions: dropLocation.SpecialInstructions,
+				StandardHoursOfOperation: dropLocation.StandardHoursOfOperation,
+				OperatingHours: dropLocation.OperatingHours.StandardHours.DayOfWeek
+		})
+		} when payload.LocatorResponse.Response.ResponseStatusCode>0
+		otherwise
+		{
+			"error": "Unable to find any locations."
+		}
+	}
+	
+}]]></dw:set-payload>
+        </dw:transform-message>
+    </sub-flow>
+    <sub-flow name="default_flow">
+        <logger message="default flow" level="INFO" doc:name="Logger"/>
+        <set-payload value="#[&quot;error&quot;: &quot;missing query params&quot;]" doc:name="Set Payload"/>
+    </sub-flow>
+</mule>

@@ -118,6 +118,6 @@ http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/m
     </sub-flow>
     <sub-flow name="default_flow">
         <logger message="default flow" level="INFO" doc:name="Logger"/>
-        <set-payload value="#[&quot;error&quot;: &quot;missing query params&quot;]" doc:name="Set Payload"/>
+        <set-payload value="{&quot;error&quot;: &quot;missing query params&quot;}" doc:name="Set Payload" mimeType="application/json"/>
     </sub-flow>
 </mule>

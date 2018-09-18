@@ -13,9 +13,12 @@ http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/m
     <http:request-config name="HTTP_Request_Configuration" protocol="HTTPS" host="onlinetools.ups.com" port="443" doc:name="HTTP Request Configuration">
     
     </http:request-config>
+    <spring:beans>
+        <spring:bean name="beanName" class="utils.MyUtils"/>
+    </spring:beans>
     <flow name="pudoapiFlow">
         <http:listener config-ref="HTTP_Listener_Configuration" path="/location/search" doc:name="HTTP" allowedMethods="GET"/>
-        <logger message="#[message.inboundProperties.'http.query.params']" level="INFO" doc:name="Logger"/>
+        <logger message="#[message.inboundProperties.'http.query.params']"  doc:name="Logger"/>
         <choice doc:name="Choice">
             <when expression="#[message.inboundProperties.'http.query.params'.address !=null]">
                 <flow-ref name="UPSSub_Flow" doc:name="UPS_Flow"/>
@@ -26,7 +29,7 @@ http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/m
         </choice>
     </flow>
     <sub-flow name="UPSSub_Flow">
-        <dw:transform-message mode="deferred" doc:name="Transform Message" metadata:id="024054ba-b993-48c1-a4cc-f0d7c9d1e6ad">
+        <dw:transform-message mode="deferred" doc:name="Transform_UPS_Request" metadata:id="024054ba-b993-48c1-a4cc-f0d7c9d1e6ad">
             <dw:input-payload/>
             <dw:set-payload><![CDATA[%dw 1.0
 %output application/json
@@ -73,13 +76,13 @@ http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/m
 }]]></dw:set-payload>
         </dw:transform-message>
         <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" doc:name="Logger"/>
-        <http:request config-ref="HTTP_Request_Configuration" path="/rest/Locator" method="POST" doc:name="HTTP">
+        <http:request config-ref="HTTP_Request_Configuration" path="/rest/Locator" method="POST" doc:name="Call_UPS_RestService">
             <http:request-builder>
                 <http:header headerName="Content-Type" value="application/json"/>
             </http:request-builder>
             <http:success-status-code-validator values="200,503"/>
         </http:request>
-        <dw:transform-message doc:name="Transform Message" metadata:id="d3001112-6db5-4de3-9aa9-1ee2933c10af">
+        <dw:transform-message doc:name="Transform_UPS_Response" metadata:id="d3001112-6db5-4de3-9aa9-1ee2933c10af">
             <dw:input-payload mimeType="application/json"/>
             <dw:set-payload><![CDATA[%dw 1.0
 %output application/json
@@ -108,6 +111,10 @@ http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/m
 	
 }]]></dw:set-payload>
         </dw:transform-message>
+        <json:json-to-object-transformer returnClass="java.util.Map" doc:name="JSON to Object"/>
+        <invoke name="ReplaceHours" object-ref="beanName" method="formatWeekDay" methodArguments="#[message.payload]" doc:name="Format _Operating_Hours"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+
     </sub-flow>
     <sub-flow name="default_flow">
         <logger message="default flow" level="INFO" doc:name="Logger"/>

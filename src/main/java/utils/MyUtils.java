@@ -1,20 +1,51 @@
 package utils;
 
-import java.text.DateFormatSymbols;
+import java.util.Iterator;
+import java.util.Map;
+
+import com.fasterxml.jackson.core.TreeNode;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 
 public class MyUtils {
-	
-	public static String formatWeekDay(int day) {
-		DateFormatSymbols dfs = new DateFormatSymbols();
-	     return dfs.getWeekdays()[day]; 
-		
-	}
-	
-	public static void main(String[] args) {
-		// TODO Auto-generated method stub
-		MyUtils mu =new MyUtils();
-		
-	        System.out.println(mu.formatWeekDay(1));
+
+	public static Map formatWeekDay(Map response) {
+		ObjectMapper mapper = new ObjectMapper();
+		String json;
+		JsonNode replaceNode = null;
+		try {
+			json = mapper.writeValueAsString(response);
+
+			JsonNode node = mapper.readTree(json);
+			JsonNode locationNode = node.at("/LocatorResponse/SearchResults/DropLocation");
+
+			Iterator<JsonNode> locations = locationNode.elements();
+
+			while (locations.hasNext()) {
+
+				JsonNode accesspoint = locations.next();
+
+				TreeNode operatingNode = accesspoint.at("/OperatingHours");
+
+				ProcessHours[] temp = mapper.treeToValue(operatingNode, ProcessHours[].class);
+
+				JsonNode o = mapper.valueToTree(temp);
+				replaceNode = accesspoint.findPath("OperatingHours");
+				((ArrayNode) replaceNode).removeAll(); // remove current node
+
+				((ArrayNode) replaceNode).add(o); // add new one with new value
+			}
+
+		//	System.out.println("json after update-->" + node);
+			response = mapper.convertValue(node, Map.class);
+
+		} catch (Exception e) {
+
+			e.printStackTrace();
+		}
+
+		return response;
 
 	}
 
